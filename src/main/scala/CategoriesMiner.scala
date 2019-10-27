@@ -7,8 +7,6 @@ import org.jsoup.select.Elements
 import spark_conf.Context
 import word2vec.LibraryVector
 
-import scala.util.matching.Regex
-
 import scala.io.Source
 import scala.reflect.ClassTag
 
@@ -214,17 +212,6 @@ object CategoriesMiner extends Context {
     val keysLibraries: Array[String] = allLibrariesMap.keys.toArray
     val valuesLibraries: Array[Array[String]] = allLibrariesMap.values.toArray
 
-    joinedData.foreach(row => {
-      val answerID: Int = row.getAs[Int]("Answer_ID")
-
-      val body: String = row.getAs[String]("Body")
-      val regex: Regex = ".*(^|[a-z]+ |[.!?] |[(<])IOUtils([>).,!?$]| [a-z]+).*".r
-      val matches: Array[String] = regex.findAllIn(body).toArray
-
-      if (matches.length > 0)
-        println(answerID)
-    })
-
     val usagesLibraries: Array[String] = joinedData.map(row => {
       val answerID: Int = row.getAs[Int]("Answer_ID")
       val questionID: Int = row.getAs[Int]("Question_ID")
@@ -276,50 +263,5 @@ object CategoriesMiner extends Context {
     usagesLibraries.foreach(line => pw.write(line))
     pw.close()
     sparkSession.stop()
-
-//    println("Checking for the answers with imports ...")
-//    val withImports = joinedData.filter(row => containsImport(row.getAs[String]("Body")))
-//    val noImports = joinedData.filter(row => !containsImport(row.getAs[String]("Body")))
-//
-//    println(s"Total of answers in category: ${joinedData.count()}\nWith import: ${withImports.count()}")
-//
-//    println("Analyzing posts with imports ...")
-//
-//    withImports.foreach(row => {
-//      val answerID: Int = row.getAs[Int]("Answer_ID")
-//      val body: String = row.getAs[String]("Body")
-//      val modulesPost: Array[String] = getLibrariesImport(body).split(" ")
-//
-//      println(modulesPost.mkString(" "))
-//      for (modulePost <- modulesPost)  {
-//        for (modulesLibraries <- valuesJoined) {
-//          if (modulesLibraries.contains(modulePost)) {
-//            println(modulePost, modulesLibraries)
-//            println(s"$answerID -> $modulePost")
-//          }
-//        }
-//      }
-////      val modulesFiltered: Array[String]  = modulesPost.filter(module => {
-////        val inValues: Array[String] = valuesJoined.filter(_.contains(module))
-////        inValues.length > 0
-////      })
-////
-////      if (modulesFiltered.length > 0)
-////        println(s"$answerID -> ${modulesFiltered.mkString(" ")}")
-//    })
-//
-//
-//    println("Checking for the answers without imports and with links ...")
-//    val withLinks = noImports.filter(row => containsLinks(row.getAs[String]("Body")))
-//    val noLinks = noImports.filter(row => !containsLinks(row.getAs[String]("Body")))
-//
-//    println(s"Total answers without import: ${noImports.count()}\nWith links: ${withLinks.count()}")
-//    println(s"Answers without import or links: ${noLinks.count()}")
-//
-//    println("Writing to a file ...")
-//    selectedLibraries
-//      .write.mode(SaveMode.Overwrite)
-//      .option("header", "true")
-//      .csv("data/libraries/categories_similarities/json_libraries_similarities")
   }
 }
