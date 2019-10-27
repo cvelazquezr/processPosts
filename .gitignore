@@ -1,0 +1,20 @@
+##### Files #####
+.DS_Store
+
+##### Folders #####
+# Intellij Folder
+.idea/
+
+# Data folder
+data/libraries/
+data/posts/
+data/results/
+data/tags/
+data/scor_model/
+data/usages/
+
+# Jar folder
+jars/
+
+# Compiled folder
+target
