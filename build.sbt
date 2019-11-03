@@ -10,5 +10,6 @@ libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-mllib" % "2.4.4",
   "org.jsoup" % "jsoup" % "1.12.1",
   "org.apache.opennlp" % "opennlp-tools" % "1.9.1",
-  "org.apache.bcel" % "bcel" % "6.3.1"
+  "org.apache.bcel" % "bcel" % "6.3.1",
+  "edu.stanford.nlp" % "stanford-corenlp" % "3.9.2"
 )

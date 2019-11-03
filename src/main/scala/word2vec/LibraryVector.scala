@@ -183,7 +183,7 @@ class LibraryVector(groupID: String, artifactID: String, version: String) {
     } else ""
   }
 
-  def getModulesToCodePattern(): String = {
+  def getFullyQualifiedClasses(): String = {
     downloadJar()
     val file: File = new File(path)
 
@@ -192,11 +192,23 @@ class LibraryVector(groupID: String, artifactID: String, version: String) {
       val textToWrite = new StringBuilder
 
       val entries = zipFile.entries.asScala
-      entries.filter(x => x.isDirectory).foreach(entry => {
+      entries.filter(x => !x.isDirectory && x.getName.endsWith(".class")).foreach(entry => {
         val entryName: String = entry.getName
-        if (!entryName.startsWith("META-INF")) {
-          val replacement: String = entryName.replaceAll("/", "\\.")
-          textToWrite.append(replacement.dropRight(1)).append(" ")
+
+        if (!entryName.equals("module-info.class")) {
+
+
+          val classParser: ClassParser = new ClassParser(zipFile.getInputStream(entry), entry.getName)
+          val javaClass: JavaClass = classParser.parse()
+
+          if (javaClass.isPublic || !(javaClass.isPrivate & javaClass.isProtected)) {
+            var className: String = javaClass.getClassName
+
+            if (className.contains("$"))
+              className = className.replaceAll("\\$", ".")
+
+            textToWrite.append(className).append(" ")
+          }
         }
       })
       zipFile.close()

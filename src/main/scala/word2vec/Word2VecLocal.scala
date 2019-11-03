@@ -67,7 +67,7 @@ class Word2VecLocal extends Serializable {
   }
 
   /** Check if the word is present in the vocab map.
-   * @param word Word to be checked.
+   * @param word tags_processing.Word to be checked.
    * @return True if the word is in the vocab map.
    */
   def contains(word: String): Boolean = {
@@ -75,7 +75,7 @@ class Word2VecLocal extends Serializable {
   }
 
   /** Get the vector representation for the word.
-   * @param word Word to retrieve vector for.
+   * @param word tags_processing.Word to retrieve vector for.
    * @return The vector representation of the word.
    */
   def vector(word: String): Array[Float] = {
@@ -307,7 +307,7 @@ class Word2VecLocal extends Serializable {
    * @param words List of (word, score) pairs to be printed.
    */
   def pprint(words: List[(String, Float)]): Unit = {
-    println("\n%50s".format("Word") + (" " * 7) + "Cosine distance\n" + ("-" * 72))
+    println("\n%50s".format("tags_processing.Word") + (" " * 7) + "Cosine distance\n" + ("-" * 72))
     println(words.map(s => "%50s".format(s._1) + (" " * 7) + "%15f".format(s._2)).mkString("\n"))
   }
 }

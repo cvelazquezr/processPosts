@@ -6,24 +6,21 @@ import org.jsoup.nodes.{Document, Element}
 import org.jsoup.select.Elements
 import spark_conf.Context
 import word2vec.LibraryVector
+import edu.stanford.nlp.tagger.maxent.MaxentTagger
 
-import scala.collection.immutable.ListMap
-import scala.collection.mutable
 import scala.io.Source
-
 import scala.reflect.ClassTag
 
-case class Library(name: String, metadata: String, var classes: Set[String] = Set())
+case class Library(name: String,
+                   metadata: String,
+                   var classesMethods: Set[String] = Set())
 
-case class Usage(groupID: String,
-                 artifactID: String,
-                 classes: String,
-                 prevalence: Float,
-                 var answerID: Int = 0,
-                 var title: String = "",
-                 var tags: String = "") {
-  override def toString: String = s"$answerID,${title.replaceAll(",", "")},$groupID,$tags," +
-    s"$artifactID,$classes,$prevalence"
+case class Usage(metadata: String, matches: Int) {
+  override def toString: String = s"$metadata->$matches"
+}
+
+case class PostInformation(answer_Id: Int, title: String) {
+  override def toString: String = s"$answer_Id,$title"
 }
 
 object LibraryExtractorFilter extends Context {
@@ -33,7 +30,7 @@ object LibraryExtractorFilter extends Context {
   def cleanText(text: String): String = {
     val cleanedText = text.replaceAll("\n", " ")
 
-    val javaBuffered = Source.fromFile("data/java_words.txt")
+    val javaBuffered = Source.fromFile("data/resources/java_words.txt")
     val javaWords: Seq[String] = javaBuffered.getLines().toSeq
 
     val cleanedWords: Array[String] = cleanedText.split(" ").map(word => word.map(chr => {
@@ -49,9 +46,15 @@ object LibraryExtractorFilter extends Context {
 
     val filteredClasses: Array[String] = cleanEmpty
       .filter(word => !javaWords.contains(word))
-      .filter(word => word(0).isUpper)
 
     filteredClasses.mkString(" ")
+  }
+
+  def getIdentifiers(body: String): Array[String] = {
+    val html: Document = Jsoup.parse(body)
+    val codes: Elements = html.select("code")
+
+    codes.toArray().map(code => cleanText(code.asInstanceOf[Element].text())).mkString(" ").split(" ")
   }
 
   def getIndexLibrary(libraries: Array[Library], metadataInfo: String): Int = {
@@ -61,73 +64,125 @@ object LibraryExtractorFilter extends Context {
     -1
   }
 
-  def getClassesReferences(body: String, libraries: Array[Library]): Option[Usage] = {
+  def containsImport(body: String): Boolean = {
     val html: Document = Jsoup.parse(body)
     val codes: Elements = html.select("code")
 
     val processedCodes: Array[String] = codes
       .toArray()
-      .map(code => cleanText(code.asInstanceOf[Element].text()))
+      .map(_.asInstanceOf[Element].text())
       .mkString(" ")
       .split(" ")
 
-    val inLibraries = new mutable.HashMap[String, Int]
-    val inLibrariesClasses = new mutable.HashMap[String, String]
+    val importLines = processedCodes.filter(_.contains("import"))
 
-    for (code <- processedCodes) {
-      for (library <- libraries) {
-        if (library.classes.contains(code.trim)) {
-          if (inLibraries.contains(library.metadata)) {
-            inLibraries(library.metadata) += 1
-            inLibrariesClasses(library.metadata) += "|" + code.trim
-          } else {
-            inLibraries(library.metadata) = 1
-            inLibrariesClasses(library.metadata) = code.trim
-          }
-        }
-      }
-    }
+    if (importLines.length > 0)
+      return true
+    false
+  }
 
-    if (inLibraries.nonEmpty) {
-      val orderedElements: ListMap[String, Int] = ListMap(inLibraries.toSeq.sortWith(_._2 > _._2): _*)
+  def containsLinks(body: String): Boolean = {
+    val html: Document = Jsoup.parse(body)
+    val codes: Elements = html.select("a")
 
-      val metadata: Array[String] = orderedElements.head._1.split(" ")
-      val groupElement: String = metadata(0)
-      val artifactElement: String = metadata(1)
-      val prevalence: Float = orderedElements.head._2.toFloat / processedCodes.length.toFloat
+    codes.toArray().nonEmpty
+  }
 
-      Some(Usage(groupElement, artifactElement, inLibrariesClasses(orderedElements.head._1), prevalence))
-    } else None
+  def processTitle(title: String): String = {
+    val cleanedTitle: String = title.replaceAll(",", "")
+    val maxentTagger: MaxentTagger = new MaxentTagger("data/resources/english-left3words-distsim.tagger")
+
+    val tags: String = maxentTagger.tagString(cleanedTitle)
+    val eachTag: Array[String] = tags.split("\\s+")
+
+    val listTags: Array[(String, String)] = for (tag <- eachTag if tag.split("_")(1).contains("NN") ||
+      tag.split("_")(1).contains("VB") || tag.split("_")(1).contains("JJ"))
+      yield (tag.split("_")(0), tag.split("_")(1))
+
+    val tokens: Array[String] = for (tag <- listTags) yield { tag._1.toLowerCase }
+    tokens.mkString(" ")
+  }
+
+  // Regular expressions of the state-of-the-art
+  def fullyQualifiedRegex(body: String, typeQualified: String): Int = {
+    val expressionRegex = "(?i). ∗\\b"  + typeQualified + "\\b.∗"
+    val regex = expressionRegex.r
+    regex.findAllIn(body).toArray.length
+  }
+
+  def nonQualifiedRegex(body: String, typeName: String): Int = {
+    val expressionRegex = ".*(^|[a-z]+ |[\\.!?] |[\\(<])" + typeName + "([>\\)\\.,!?$]| [a-z]+).*"
+    val regex = expressionRegex.r
+    regex.findAllIn(body).toArray.length
+  }
+
+  def linksRegex(body: String, packageName: String, typeName: String): Unit = {
+    val expressionRegex = ".∗ <a.∗href.∗" + packageName + "/" + typeName + "\\.html.∗ >.∗ </a>.∗"
+    val regex = expressionRegex.r
+    regex.findAllIn(body)
+  }
+
+  def classMethodsRegex(body: String, className: String, methodName: String): Int = {
+    val expressionRegex = ". ∗ "+ className + "\\." + methodName + "[\\(| ]"
+    val regex = expressionRegex.r
+    regex.findAllIn(body).toArray.length
   }
 
   def main(args: Array[String]): Unit = {
-    println("Loading information about the libraries ...")
-    val informationLibrary = sparkSession
-      .read
-      .option("header", "true")
-      .option("inferSchema", "true")
-      .csv("data/libraries/json_libraries.csv")
+    println("Loading data ...")
 
-    val librariesVersions = sparkSession
-      .read
-      .option("header", "true")
-      .option("inferSchema", "true")
-      .csv("data/libraries/json_libraries_versions.csv")
-
+    val categoryInStudy: String = "json_libraries"
     val categorySimilarities = sparkSession
       .read
+      .option("quote", "\"")
+      .option("escape", "\"")
       .option("header", "true")
       .option("inferSchema", "true")
-      .csv("data/libraries/categories_similarities/json_libraries_similarities")
+      .csv(s"data/categories/$categoryInStudy.csv")
 
-    println("Loading all the StackOverflow posts ...")
     val dataPosts = sparkSession
       .read
+      .option("quote", "\"")
+      .option("escape", "\"")
       .option("header", "true")
       .option("inferSchema", "true")
       .csv("data/posts/java_posts.csv")
       .toDF()
     val dataNoNull = dataPosts.na.drop()
+
+    val joinedData = categorySimilarities
+      .join(dataNoNull, "Answer_ID")
+      .drop(dataNoNull.col("Answer_ID"))
+      .drop(dataNoNull.col("Question_ID"))
+      .drop(dataNoNull.col("Title"))
+      .drop(categorySimilarities.col("Body"))
+      .dropDuplicates()
+
+    val informationLibrary = sparkSession
+      .read
+      .option("header", "true")
+      .option("inferSchema", "true")
+      .csv(s"data/libraries/$categoryInStudy.csv")
+
+    val librariesVersions = sparkSession
+      .read
+      .option("header", "true")
+      .option("inferSchema", "true")
+      .csv(s"data/libraries/${categoryInStudy}_versions.csv")
+
+    val postsWithImports = joinedData.filter(row => {
+      val body: String = row.getAs[String]("Body")
+      containsImport(body)
+    })
+
+    val postsWithoutImportsWithLinks = joinedData.filter(row => {
+      val body: String = row.getAs[String]("Body")
+      !containsImport(body) && containsLinks(body)
+    })
+
+    println(s"With Imports: ${postsWithImports.count()}")
+    println(s"Without Imports and with Links: ${postsWithoutImportsWithLinks.count()}")
+    println(s"Total amount of posts: ${joinedData.count()}")
 
     val librariesIds = librariesVersions.map(library => {
       val groupId: String = library.getAs[String]("GroupID")
@@ -165,47 +220,44 @@ object LibraryExtractorFilter extends Context {
 
       val libraryVector: LibraryVector = new LibraryVector(metadataInformation(0),
         metadataInformation(1), metadataInformation(2))
-      val classes: Array[String] = libraryVector
-        .getOnlyClasses()
+
+      val classesMethods: Array[String] = libraryVector
+        .getClassesMethods()
         .split(" ")
         .filter(_.length >  1)
 
       val index: Int = getIndexLibrary(libraries, considerMetadata)
-      libraries(index).classes = libraries(index).classes.union(classes.toSet)
+      libraries(index).classesMethods = libraries(index).classesMethods.union(classesMethods.toSet)
     }
 
-    println("Extracting information about the selected posts ...")
-    val answersIds = categorySimilarities.select("Answer_ID")
-    val dataToAnalyze = dataNoNull.select("Answer_ID", "Body", "Title", "Tags")
+    println("Selecting most likely library for the answer (Code based): ")
+    val usages = joinedData.map(post => {
+      val answer_Id: Int = post.getAs[Int]("Answer_ID")
+      val title: String = post.getAs[String]("Title")
+      val body: String = post.getAs[String]("Body")
+      val identifiers: Array[String] = getIdentifiers(body)
 
-    val fullData = dataToAnalyze.join(answersIds, "Answer_ID").dropDuplicates()
+      var usagesPost: Array[Usage] = Array()
 
-    println("Start processing ...")
-    val writeText = fullData.map(row => {
-      val answerId = row.getAs[String]("Answer_ID")
-      val title = row.getAs[String]("Title")
-      val tags = row.getAs[String]("Tags")
-      val body = row.getAs[String]("Body")
+      libraries.foreach(library => {
+        val matchesLibrary: Int = library.classesMethods.intersect(identifiers.toSet).size
+        if (matchesLibrary > 0) {
+          usagesPost :+= Usage(library.metadata, matchesLibrary)
+        }
+      })
+      val processedTitle: String =  processTitle(title)
+      val postInformation: PostInformation = PostInformation(answer_Id, processedTitle)
+      (postInformation, usagesPost)
+    }).collect().toMap
 
-      val usageOption = getClassesReferences(body, libraries)
-      if (usageOption.isEmpty)
-        ""
-      else {
-        val usage = usageOption.get
-        usage.answerID = answerId.toInt
-        usage.title = title
-        usage.tags = tags
+    val pw: PrintWriter = new PrintWriter(new File(s"data/usages/$categoryInStudy.txt"))
+    usages.foreach(usage => {
+      val usageArr: Array[Usage] = usage._2
+      val usagesStr: String = usageArr.mkString("|")
+      pw.write(s"${usage._1},$usagesStr\n")
+    })
 
-        usage.toString + "\n"
-      }
-    }).filter(_.length > 1)
-
-    println(s"Length textsToWrite: ${writeText.count()}")
-
-    val pw = new PrintWriter(new File("data/libraries/libraries_similarities/json_identifiers.csv"))
-    pw.write(writeText.collect().mkString(""))
     pw.close()
-
     sparkSession.stop()
   }
 }

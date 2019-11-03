@@ -6,6 +6,7 @@
 .idea/
 
 # Data folder
+data/categories/
 data/libraries/
 data/posts/
 data/results/

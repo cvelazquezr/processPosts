@@ -6,7 +6,6 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.{Document, Element}
 import org.jsoup.select.Elements
 import spark_conf.Context
-import utils.Utils.splitCamelCase
 import word2vec.LibraryVector
 
 import scala.collection.immutable.ListMap
@@ -28,9 +27,6 @@ object CategoriesExtractor extends Context {
     val cleanedText = text.replaceAll("\n", " ")
     val porterStemmer: PorterStemmer = new PorterStemmer
 
-    val javaBuffered = Source.fromFile("data/java_words.txt")
-    val javaWords: Seq[String] = javaBuffered.getLines().toSeq
-
     val cleanedWords: Array[String] = cleanedText.split(" ").map(word => word.map(chr => {
       if (chr.isLetter)
         chr
@@ -42,12 +38,10 @@ object CategoriesExtractor extends Context {
       .filter(word => word.trim.length > 2)
       .map(word => word.trim)
 
-    val stemmedWords: Array[Array[String]] = cleanEmpty
-      .filter(word => !javaWords.contains(word))
-      .map(word => splitCamelCase(word).split(" ")
-        .map(word2 => porterStemmer.stem(word2)))
+    val stemmedWords: Array[String] = cleanEmpty
+        .map(word2 => porterStemmer.stem(word2.toLowerCase))
 
-    stemmedWords.map(arr => arr.mkString(" ")).mkString(" ")
+    stemmedWords.mkString(" ")
   }
 
   def getIdentifiers(body: String): Array[String] = {
@@ -157,9 +151,8 @@ object CategoriesExtractor extends Context {
     })
 
     println("Calculating distances between the posts and the categories ...")
-    val pw = new PrintWriter(new File("data/libraries/categories_similarities.txt"))
 
-    identifiersPosts.foreach(post => {
+    val identifiers = identifiersPosts.map(post => {
       if (post.codeIdentifiers.length > 0) {
         val distances: Array[Double] = vectorsProcessed.map(pair => {
           model.n_similarity(post.codeIdentifiers.split(" "), pair._2.split(" "))
@@ -174,10 +167,13 @@ object CategoriesExtractor extends Context {
 
           post.closestLibrary = closestCategory
           post.distance = maxDistance
-          pw.write(post.toString + "\n")
-        }
-      }
-    })
+          post.toString + "\n"
+        } else ""
+      } else ""
+    }).filter(_.length > 0)
+
+    val pw = new PrintWriter(new File("data/libraries/categories_similarities.txt"))
+    identifiers.collect().foreach(line => pw.write(line))
     pw.close()
 
     sparkSession.stop()
