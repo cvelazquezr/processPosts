@@ -88,6 +88,26 @@ object LibraryExtractorFilter extends Context {
     codes.toArray().nonEmpty
   }
 
+  def containsReferenceInText(title: String, body: String, libraries: Array[String]): Boolean = {
+    // Check for the title
+    val inTitle: Array[String] = libraries.filter(name => title.toLowerCase().contains(name.toLowerCase()))
+    if (inTitle.length > 0)
+      return true
+
+    // Check for the body
+    val html: Document = Jsoup.parse(body)
+    html.select("pre").remove()
+    html.select("code").remove()
+
+    val htmlString: String = html.toString
+
+    val inBody: Array[String] = libraries.filter(name => htmlString.toLowerCase().contains(name.toLowerCase()))
+    if (inBody.length > 0)
+      return true
+    false
+  }
+
+
   def processTitle(title: String): String = {
     val cleanedTitle: String = title.replaceAll(",", "")
     val maxentTagger: MaxentTagger = new MaxentTagger("data/resources/english-left3words-distsim.tagger")
@@ -175,13 +195,32 @@ object LibraryExtractorFilter extends Context {
       containsImport(body)
     })
 
-    val postsWithoutImportsWithLinks = joinedData.filter(row => {
+    val postsWithoutImports = joinedData.filter(row => {
       val body: String = row.getAs[String]("Body")
-      !containsImport(body) && containsLinks(body)
+      !containsImport(body)
+    })
+
+    val postsWithoutImportsWithLinks = postsWithoutImports.filter(row => {
+      val body: String = row.getAs[String]("Body")
+      containsLinks(body)
+    })
+
+    val postsWithoutImportsWithoutLinks = postsWithoutImports.filter(row => {
+      val body: String = row.getAs[String]("Body")
+      !containsLinks(body)
+    })
+
+    val librariesNames: Array[String] = Array("Jackson", "Gson", "JSON in Java", "Fastjson", "JSON Simple", "JSON Path")
+    val postsTextReference = postsWithoutImportsWithoutLinks.filter(row => {
+      val answer_Id: Int = row.getAs[Int]("Answer_ID")
+      val title: String = row.getAs[String]("Title")
+      val body: String = row.getAs[String]("Body")
+      containsReferenceInText(title, body, librariesNames)
     })
 
     println(s"With Imports: ${postsWithImports.count()}")
     println(s"Without Imports and with Links: ${postsWithoutImportsWithLinks.count()}")
+    println(s"With References in the text: ${postsTextReference.count()}")
     println(s"Total amount of posts: ${joinedData.count()}")
 
     val librariesIds = librariesVersions.map(library => {
