@@ -13,6 +13,7 @@ data/results/
 data/tags/
 data/scor_model/
 data/usages/
+data/samples/
 
 # Jar folder
 jars/

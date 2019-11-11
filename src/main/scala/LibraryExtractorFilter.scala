@@ -7,6 +7,7 @@ import org.jsoup.select.Elements
 import spark_conf.Context
 import word2vec.LibraryVector
 import edu.stanford.nlp.tagger.maxent.MaxentTagger
+import tags_processing.PreprocessTags.linesOfCode
 
 import scala.io.Source
 import scala.reflect.ClassTag
@@ -160,6 +161,12 @@ object LibraryExtractorFilter extends Context {
       .option("inferSchema", "true")
       .csv(s"data/categories/$categoryInStudy.csv")
 
+    val usagesCategory = sparkSession
+      .read
+      .option("header", "true")
+      .option("inferSchema", "true")
+      .csv("data/categories/categories_similarities.csv")
+
     val dataPosts = sparkSession
       .read
       .option("quote", "\"")
@@ -169,14 +176,6 @@ object LibraryExtractorFilter extends Context {
       .csv("data/posts/java_posts.csv")
       .toDF()
     val dataNoNull = dataPosts.na.drop()
-
-    val joinedData = categorySimilarities
-      .join(dataNoNull, "Answer_ID")
-      .drop(dataNoNull.col("Answer_ID"))
-      .drop(dataNoNull.col("Question_ID"))
-      .drop(dataNoNull.col("Title"))
-      .drop(categorySimilarities.col("Body"))
-      .dropDuplicates()
 
     val informationLibrary = sparkSession
       .read
@@ -189,6 +188,15 @@ object LibraryExtractorFilter extends Context {
       .option("header", "true")
       .option("inferSchema", "true")
       .csv(s"data/libraries/${categoryInStudy}_versions.csv")
+
+    val categoryInformation = usagesCategory.where(usagesCategory.col("Library") === categoryInStudy)
+    val joinedData = categoryInformation
+      .join(dataNoNull, "Answer_ID")
+      .drop(dataNoNull.col("Answer_ID"))
+      .drop(dataNoNull.col("Question_ID"))
+      .drop(dataNoNull.col("Title"))
+      .dropDuplicates()
+      .filter(row => linesOfCode(row.getAs[String]("Body")))
 
     val postsWithImports = joinedData.filter(row => {
       val body: String = row.getAs[String]("Body")
@@ -212,7 +220,6 @@ object LibraryExtractorFilter extends Context {
 
     val librariesNames: Array[String] = Array("Jackson", "Gson", "JSON in Java", "Fastjson", "JSON Simple", "JSON Path")
     val postsTextReference = postsWithoutImportsWithoutLinks.filter(row => {
-      val answer_Id: Int = row.getAs[Int]("Answer_ID")
       val title: String = row.getAs[String]("Title")
       val body: String = row.getAs[String]("Body")
       containsReferenceInText(title, body, librariesNames)
@@ -269,8 +276,14 @@ object LibraryExtractorFilter extends Context {
       libraries(index).classesMethods = libraries(index).classesMethods.union(classesMethods.toSet)
     }
 
+    val total = joinedData.count()
+    var k = 0
+
     println("Selecting most likely library for the answer (Code based): ")
     val usages = joinedData.map(post => {
+      k += 1
+      println(s"Processing $k/$total")
+
       val answer_Id: Int = post.getAs[Int]("Answer_ID")
       val title: String = post.getAs[String]("Title")
       val body: String = post.getAs[String]("Body")

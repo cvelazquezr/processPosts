@@ -11,8 +11,9 @@ case class Pair(firstWord: Word, secondWord: Word)
 object SelectionTags {
 
   def amountCovered(arr: Array[Pair]): Unit = {
-    val amount: Int = arr.count(pair => pair.firstWord.covered == 0 || pair.secondWord.covered == 0)
-    println(s"Tags covered: ${amount}")
+    val amount: Int = arr.count(pair => pair.firstWord.covered != 0 || pair.secondWord.covered != 0)
+    println(s"Tags covered: $amount")
+    println(s"Total tags: ${arr.length}")
   }
 
   def spreadAssignment(currentCovered: Array[Pair], word: String, assignment: Int): Array[Pair] = {
@@ -30,7 +31,7 @@ object SelectionTags {
   }
 
   def main(args: Array[String]): Unit = {
-    val categoryInStudy: String = "json_libraries"
+    val categoryInStudy: String = "json_bigrams"
     val pathTags: String = s"data/results/tags_selection/$categoryInStudy.txt"
 
     val source: Source = Source.fromFile(pathTags)
@@ -58,41 +59,43 @@ object SelectionTags {
     for (i <- pairs.indices) {
       var evaluation: Int = -2
 
-      if (pairs(i).firstWord.covered == 0) {
-        val firstWord: String = lines(i).split(",")(0)
+      if (pairs(i).firstWord.covered != 1 && pairs(i).secondWord.covered != 1) {
+        if (pairs(i).firstWord.covered == 0) {
+          val firstWord: String = lines(i).split(",")(0)
 
-        while (evaluation <= 0) {
-          println(firstWord)
+          while (evaluation <= 0) {
+            println(firstWord)
 
-          evaluation = scala.io.StdIn.readInt()
-          if (evaluation == -1)
-            amountCovered(pairs)
+            evaluation = scala.io.StdIn.readInt()
+            if (evaluation == -1)
+              amountCovered(pairs)
+          }
+          pairs(i).firstWord.covered = evaluation
+
+          // Spread the information
+          spreadAssignment(pairs, firstWord, evaluation)
         }
-        pairs(i).firstWord.covered = evaluation
 
-        // Spread the information
-        spreadAssignment(pairs, firstWord, evaluation)
-      }
+        if (pairs(i).secondWord.covered == 0) {
+          val secondWord: String = lines(i).split(",")(1)
+          evaluation = -2
 
-      if (pairs(i).secondWord.covered == 0) {
-        val secondWord: String = lines(i).split(",")(1)
-        evaluation = -2
+          while (evaluation <= 0) {
+            println(secondWord)
 
-        while (evaluation <= 0) {
-          println(secondWord)
+            evaluation = scala.io.StdIn.readInt()
+            if (evaluation == -1)
+              amountCovered(pairs)
+          }
+          pairs(i).secondWord.covered = evaluation
 
-          evaluation = scala.io.StdIn.readInt()
-          if (evaluation == -1)
-            amountCovered(pairs)
+          //Spread the information
+          spreadAssignment(pairs, secondWord, evaluation)
         }
-        pairs(i).secondWord.covered = evaluation
-
-        //Spread the information
-        spreadAssignment(pairs, secondWord, evaluation)
       }
     }
-    val pw: PrintWriter = new PrintWriter(new File(pathTags))
 
+    val pw: PrintWriter = new PrintWriter(new File(pathTags))
     pairs.foreach(pair =>  {
       val textToWrite: String = s"${pair.firstWord.identifier},${pair.secondWord.identifier}," +
         s"${pair.firstWord.covered},${pair.secondWord.covered}\n"

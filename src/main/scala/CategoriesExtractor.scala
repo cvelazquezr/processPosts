@@ -10,7 +10,6 @@ import word2vec.LibraryVector
 
 import scala.collection.immutable.ListMap
 import scala.collection.mutable
-import scala.io.Source
 import scala.reflect.ClassTag
 
 // Associate Maven categories with StackOverflow posts

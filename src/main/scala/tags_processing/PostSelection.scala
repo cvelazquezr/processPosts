@@ -54,7 +54,7 @@ object PostSelection extends Context {
       .dropDuplicates()
       .filter(row => linesOfCode(row.getAs[String]("Body")))
 
-    val source = Source.fromFile(s"data/results/tags_selection/$categoryInStudy.txt")
+    val source = Source.fromFile(s"data/results/tags_selection/json_bigrams.txt")
 
     val selectedTags = source.getLines().map(line => {
       val splittedLine: Array[String] = line.split(",")
