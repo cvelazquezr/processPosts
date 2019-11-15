@@ -8,6 +8,8 @@ import org.jsoup.select.Elements
 import spark_conf.Context
 import word2vec.LibraryVector
 
+import org.apache.spark.mllib.feature.Word2VecModel
+
 import scala.collection.immutable.ListMap
 import scala.collection.mutable
 import scala.io.Source
@@ -123,8 +125,9 @@ object CategoriesExtractor extends Context {
     vectorCategories
   }
 
-
   def main(args: Array[String]): Unit = {
+    val sc = sparkSession.sparkContext
+
     println("Loading all libraries ...")
     val librariesDetails = sparkSession
       .read
@@ -155,9 +158,16 @@ object CategoriesExtractor extends Context {
       LibraryData(categoryName, groupId, artifactId, version)
     })
 
-    println("Loading SCOR Model ...")
-    val model: word2vec.Word2VecLocal = new word2vec.Word2VecLocal()
-    model.load("data/scor_model/model_word2vec_v2.txt")
+//    println("Loading SCOR Model ...")
+//    val model: word2vec.Word2VecLocal = new word2vec.Word2VecLocal()
+//    model.load("data/scor_model/model_word2vec_v2.txt")
+
+    println("Loading New Model ...")
+    val model: Word2VecModel = Word2VecModel.load(sc,"data/model/modelLibraries")
+    val vectors: Map[String, Array[Float]] = model.getVectors
+
+    val modelLocal: word2vec.Word2VecLocal = new word2vec.Word2VecLocal()
+    modelLocal.setVocab(vectors)
 
     println("Loading all the StackOverflow posts ...")
     val dataPosts = sparkSession
@@ -189,7 +199,7 @@ object CategoriesExtractor extends Context {
     val identifiers = identifiersPosts.map(answer => {
       if (answer.codeIdentifiers.length > 0) {
         val distances: Array[Double] = vectorsCategories.map(pair => {
-          model.n_similarity(answer.codeIdentifiers.split(" "), pair._2.split(" "))
+          modelLocal.n_similarity(answer.codeIdentifiers.split(" "), pair._2.split(" "))
         }).toArray
 
         val maxDistance: Double = distances.max
@@ -217,7 +227,7 @@ object CategoriesExtractor extends Context {
       val bodies: Array[String] = row.getAs[mutable.WrappedArray[String]]("Bodies").toArray
 
       val identifiers: Array[String] = bodies.map(body => getIdentifiers(body)).filter(_.length > 2).map(_.mkString(" "))
-      Post(questionID, identifiers)
+
       Post(questionID, identifiers)
     })
 

@@ -7,7 +7,7 @@ import scala.io.Source
 
 class Word2VecLocal extends Serializable {
   /** Map of words and their associated vector representations */
-  private val vocab = new mutable.HashMap[String, Array[Float]]()
+  private var vocab: mutable.Map[String, Array[Float]] = mutable.Map()
 
   /** Number of words */
   private var numWords = 0
@@ -47,6 +47,13 @@ class Word2VecLocal extends Serializable {
 
     source.close()
     println("Loaded Word2Vec model")
+  }
+
+  /** Set the vocabulary of words
+   * @param vocabulary The vocabulary of words to be set
+   */
+  def setVocab(vocabulary: Map[String, Array[Float]]): Unit = {
+    vocab = mutable.Map(vocabulary.toSeq: _*)
   }
 
   /** Return the number of words in the vocab.
