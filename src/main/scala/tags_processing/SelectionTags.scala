@@ -3,7 +3,7 @@ package tags_processing
 import java.io.{File, PrintWriter}
 import scala.io.Source
 
-// Manual inspection of the bigrams of tags
+// Manual selection of the bigrams of tags
 
 case class Word(identifier: String, var covered: Int = 0)
 case class Pair(firstWord: Word, secondWord: Word)
@@ -31,8 +31,8 @@ object SelectionTags {
   }
 
   def main(args: Array[String]): Unit = {
-    val categoryInStudy: String = "json_bigrams"
-    val pathTags: String = s"data/results/tags_selection/$categoryInStudy.txt"
+    val categoryInStudy: String = "dependency_injection"
+    val pathTags: String = s"data/results/tags_selection/${categoryInStudy}_bigrams.txt"
 
     val source: Source = Source.fromFile(pathTags)
     val lines: Array[String] = source.getLines().toArray
@@ -42,18 +42,18 @@ object SelectionTags {
       Pair(Word(lineSplitted(0)), Word(lineSplitted(1)))
     })
 
-    // Temp code to read saved information
-    val source2: Source = Source.fromFile("data/results/tags_selection/temp_output.txt")
-    val lines2: Array[String] = source2.getLines().toArray
-    val words: Array[String] = lines2.indices.filter(_ %  2 == 0).map(index => {lines2(index)}).toArray
-    val numbers: Array[Int] = lines2.indices.filter(_ %  2 != 0).map(index => {lines2(index).toInt}).toArray
-
-    val mappingIndexed: IndexedSeq[(String, Int)] = for (i <- words.indices) yield words(i) -> numbers(i)
-    val mapping: Map[String, Int] = mappingIndexed.toMap
-
-    mapping.foreach(item => {
-      spreadAssignment(pairs, item._1, item._2)
-    })
+//    // Uncomment if you fall asleep in the middle of the process :)
+//    val source2: Source = Source.fromFile("data/results/tags_selection/temp_output.txt")
+//    val lines2: Array[String] = source2.getLines().toArray
+//    val words: Array[String] = lines2.indices.filter(_ %  2 == 0).map(index => {lines2(index)}).toArray
+//    val numbers: Array[Int] = lines2.indices.filter(_ %  2 != 0).map(index => {lines2(index).toInt}).toArray
+//
+//    val mappingIndexed: IndexedSeq[(String, Int)] = for (i <- words.indices) yield words(i) -> numbers(i)
+//    val mapping: Map[String, Int] = mappingIndexed.toMap
+//
+//    mapping.foreach(item => {
+//      spreadAssignment(pairs, item._1, item._2)
+//    })
 
     println("You will have to put scores 1 for (Not Valid) and 2 for (Valid) to tags:")
     for (i <- pairs.indices) {

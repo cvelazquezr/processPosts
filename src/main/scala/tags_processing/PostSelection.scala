@@ -1,23 +1,19 @@
 package tags_processing
 
 import java.io.{File, PrintWriter}
+
 import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 
-import scala.io.Source
 import spark_conf.Context
-import tags_processing.PreprocessTags.linesOfCode
+import org.apache.spark.sql.functions._
 
-// Given a previous selection of the tags, returns the posts that contains those tags
+import scala.collection.immutable.ListMap
+import scala.collection.mutable
+
+// Posts selection by the similarities in their answers towards the same category
 
 import scala.reflect.ClassTag
-
-case class Post(question_Id: Int = 0,
-                answer_Id: Int = 0,
-                title: String = "",
-                tags: Array[String] = Array(),
-                body: String = "") {
-  override def toString: String = s"$question_Id,$answer_Id,$title,${tags.mkString("|")},$body"
-}
 
 object PostSelection extends Context {
   implicit def kryoEncoder[A](implicit ct: ClassTag[A]): Encoder[A] =
@@ -31,65 +27,53 @@ object PostSelection extends Context {
       .option("inferSchema", "true")
       .csv("data/categories/categories_similarities.csv")
 
-    println("Loading all the StackOverflow posts ...")
-    val dataPosts = sparkSession
-      .read
-      .option("quote", "\"")
-      .option("escape", "\"")
-      .option("header", "true")
-      .option("inferSchema", "true")
-      .csv("data/posts/java_posts.csv")
-    val dataNoNull = dataPosts.na.drop()
+    val zipper = udf[Seq[(String, Double)], Seq[String], Seq[Double]](_.zip(_))
 
-    println("Reading processed file ... ")
-    val categoryInStudy: String = "json_libraries"
-    val categoryInformation = usagesCategory.where(usagesCategory.col("Library") === categoryInStudy)
+    val groupedCategories = usagesCategory.groupBy("Question_ID")
+          .agg(collect_list("Library") as "Categories",
+            collect_list("Similarity") as "Similarities")
+          .withColumn("Categories", zipper(col("Categories"), col("Similarities")))
+          .drop("Similarities")
 
-    println("Joining data ...")
-    val joinedData = categoryInformation
-      .join(dataNoNull, "Answer_ID")
-      .drop(dataNoNull.col("Answer_ID"))
-      .drop(dataNoNull.col("Question_ID"))
-      .drop(dataNoNull.col("Title"))
-      .dropDuplicates()
-      .filter(row => linesOfCode(row.getAs[String]("Body")))
 
-    val source = Source.fromFile(s"data/results/tags_selection/json_bigrams.txt")
+    val selectedPosts = groupedCategories.map(row => {
+      val questionID: Int = row.getAs[Int]("Question_ID")
+      val categories = row
+        .getAs[mutable.WrappedArray[GenericRowWithSchema]]("Categories").toArray
+        .map(genericRow => {
+          val category: String = genericRow.getAs[String](0)
+          val similarity: Double = genericRow.getAs[Double](1)
 
-    val selectedTags = source.getLines().map(line => {
-      val splittedLine: Array[String] = line.split(",")
+          (category, similarity)
+        })
 
-      if (splittedLine(2).equals("2") && splittedLine(3).equals("2"))
-        splittedLine(0) + "," + splittedLine(1)
-      else ""
-    }).filter(_.nonEmpty).toArray
+      if (categories.length >= 2) {
+        val values: Seq[String] = categories.map(_._1)
+        val repetitions: Map[String, Int] = values.groupBy(identity).mapValues(_.size)
 
-    println("Filtering posts ...")
-    val postsSelected = joinedData.map(row => {
-      val questionId: Int = row.getAs[Int]("Question_ID")
-      val answerId: Int = row.getAs[Int]("Answer_ID")
-      val title: String = row.getAs[String]("Title")
-      val body: String = row.getAs[String]("Body")
+        val descendentOrder: ListMap[String, Int] = ListMap(repetitions.toSeq.sortWith(_._2 > _._2): _*)
+        val orderedRepetitions: Array[Int] = descendentOrder.values.toArray
+        val orderedCategories: Array[String] = descendentOrder.keys.toArray
 
-      val tagsArray: Array[String] = row.getAs[String]("Tags")
-        .replaceAll("<", "")
-        .replaceAll(">", " ")
-        .trim.split(" ")
+        if (orderedRepetitions(0) > values.size / 2) {
+          val chosenCategory: String = orderedCategories(0)
+          val filteredPerCategory = categories.filter(_._1.equals(chosenCategory))
+          val similarities: Array[Double] = filteredPerCategory.map(_._2)
+          val meanSimilarities: Double = similarities.sum / similarities.length
 
-      val combinations: Array[Array[String]] = tagsArray.combinations(2).toArray[Array[String]]
-      val combinationsMerged: Array[String] = combinations.map(arr => {
-        arr(0) + "," + arr(1)
-      })
-      val combinationsFiltered = combinationsMerged.toSet.intersect(selectedTags.toSet)
+          if (meanSimilarities >= 0.4) {
+            s"$questionID,$chosenCategory,$meanSimilarities\n"
+          } else ""
+        } else ""
+      } else ""
+    }).filter(_.length > 0)
 
-      if (combinationsFiltered.nonEmpty)
-        Post(questionId, answerId, title, tagsArray, body)
-      else Post()
-    }).filter(_.question_Id > 0)
+    println("Total posts selected in the 5 categories ...")
+    println(selectedPosts.count())
 
     println("Saving selected posts ...")
-    val pw: PrintWriter = new PrintWriter(new File(s"data/categories/$categoryInStudy.csv"))
-    postsSelected.collect().foreach(post => pw.write(post.toString + "\n"))
+    val pw: PrintWriter = new PrintWriter(new File(s"data/categories/selectedPosts.csv"))
+    selectedPosts.collect().foreach(line => pw.write(line))
     pw.close()
 
     sparkSession.close()

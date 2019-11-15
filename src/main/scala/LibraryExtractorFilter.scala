@@ -7,7 +7,6 @@ import org.jsoup.select.Elements
 import spark_conf.Context
 import word2vec.LibraryVector
 import edu.stanford.nlp.tagger.maxent.MaxentTagger
-import tags_processing.PreprocessTags.linesOfCode
 
 import scala.io.Source
 import scala.reflect.ClassTag
@@ -196,7 +195,6 @@ object LibraryExtractorFilter extends Context {
       .drop(dataNoNull.col("Question_ID"))
       .drop(dataNoNull.col("Title"))
       .dropDuplicates()
-      .filter(row => linesOfCode(row.getAs[String]("Body")))
 
     val postsWithImports = joinedData.filter(row => {
       val body: String = row.getAs[String]("Body")

@@ -61,14 +61,14 @@ class LibraryVector(groupID: String, artifactID: String, version: String) {
             val classNamePath: Array[String] = javaClass.getClassName.split("\\.")
             val className: String = classNamePath.takeRight(1)(0)
 
-            textToWrite.append(splitCamelCase(className)).append(" ")
+            textToWrite.append(className).append(" ")
             val methods: Array[Method] = javaClass.getMethods
 
             methods.filter(method => method.isPublic || !(method.isPrivate && method.isProtected)).foreach(method => {
               val methodName: String = method.getName
               if (!methodName.startsWith("<") && !methodsNames.contains(methodName) && !methodName.contains("$")) {
                 methodsNames :+= methodName
-                textToWrite.append(splitCamelCase(methodName)).append(" ")
+                textToWrite.append(methodName).append(" ")
               }
             })
           }
@@ -219,7 +219,7 @@ class LibraryVector(groupID: String, artifactID: String, version: String) {
       ""
   }
 
-  def getMethods(clazz: String): String = {
+  def getOnlyMethods(): String = {
     downloadJar()
     val file: File = new File(path)
 
@@ -243,14 +243,12 @@ class LibraryVector(groupID: String, artifactID: String, version: String) {
             if (className.contains("$"))
               className = className.split("\\$").mkString(" ")
 
-            if (className.equals(clazz)) {
               val methods: Array[Method] = javaClass.getMethods
               methods.foreach(method => {
                 if (method.isPublic || !(method.isPrivate & method.isProtected)) {
                   textToWrite.append(method.getName).append(" ")
                 }
               })
-            }
           }
         }
       })

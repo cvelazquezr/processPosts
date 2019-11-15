@@ -1,0 +1,16 @@
+Class,Category,Len,Total
+withImport,Dependency Injection,7027,7027
+withLinks,Dependency Injection,43431,50458
+not(ImportLinks),Dependency Injection,100390,150848
+withImport,Http Clients,11056,11056
+withLinks,Http Clients,62458,73514
+not(ImportLinks),Http Clients,145740,219254
+withImport,I/O Utilities,20655,20655
+withLinks,I/O Utilities,76739,97394
+not(ImportLinks),I/O Utilities,216719,314113
+withImport,JSON Libraries,25591,25591
+withLinks,JSON Libraries,92549,118140
+not(ImportLinks),JSON Libraries,303689,421829
+withImport,Mocking,5303,5303
+withLinks,Mocking,34860,40163
+not(ImportLinks),Mocking,95933,136096
